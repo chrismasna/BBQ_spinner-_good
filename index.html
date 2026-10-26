@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>360° Product Viewer</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: sans-serif;
+  }
+  #stage {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    position: relative;
+  }
+  #viewer-container {
+    width: 100vh;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+  }
+  #viewer-container:active {
+    cursor: grabbing;
+  }
+  #viewer-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+  }
+  .hint {
+    position: fixed;
+    bottom: 15px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+  <div id="stage">
+    <div id="viewer-container">
+      <img id="viewer-img" alt="360 View">
+    </div>
+  </div>
+
+  <p class="hint">Drag to spin &nbsp;•&nbsp; Pinch or scroll to zoom</p>
+
+  <script>
+    const TOTAL_FRAMES = 150;
+    const DRAG_SENSITIVITY = 35; // Pixels per frame change
+
+    // Preload images (001 to 150)
+    const images = [];
+    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+      const num = String(i).padStart(3, '0');
+      const img = new Image();
+      img.src = 'images/BBQ_spin_good_' + num + '.jpg';
+      images.push(img);
+    }
+
+    const viewerImg = document.getElementById('viewer-img');
+    let currentFloatFrame = 0;
+
+    function render() {
+      let index = Math.round(currentFloatFrame) % TOTAL_FRAMES;
+      if (index < 0) index += TOTAL_FRAMES;
+      viewerImg.src = images[index].src;
+    }
+    render();
+
+    // Interaction state
+    let isDragging = false;
+    let startX = 0;
+    let startFloatFrame = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let velocity = 0;
+    let animId = null;
+
+    const stage = document.getElementById('stage');
+
+    function onDown(e) {
+      isDragging = true;
+      if (animId) cancelAnimationFrame(animId);
+      velocity = 0;
+
+      startX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+      startFloatFrame = currentFloatFrame;
+      lastX = startX;
+      lastTime = performance.now();
+    }
+
+    function onMove(e) {
+      if (!isDragging) return;
+      const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+      const now = performance.now();
+      const dt = now - lastTime;
+      const dx = x - lastX;
+
+      if (dt > 0) {
+        velocity = (dx / dt) * 0.4; 
+      }
+
+      const totalDx = x - startX;
+      currentFloatFrame = startFloatFrame - (totalDx / DRAG_SENSITIVITY);
+      render();
+
+      lastX = x;
+      lastTime = now;
+    }
+
+    function onUp() {
+      if (!isDragging) return;
+      isDragging = false;
+
+      // Apply inertia glide on release if moving fast enough
+      if (Math.abs(velocity) > 0.01) {
+        function inertiaLoop() {
+          currentFloatFrame -= velocity * 16;
+          velocity *= 0.88; // Friction damping
+          render();
+
+          if (Math.abs(velocity) > 0.002) {
+            animId = requestAnimationFrame(inertiaLoop);
+          }
+        }
+        animId = requestAnimationFrame(inertiaLoop);
+      }
+    }
+
+    stage.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+
+    stage.addEventListener('touchstart', onDown, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
+
+    // Simple zoom/pinch
+    const container = document.getElementById('viewer-container');
+    let scale = 1;
+
+    stage.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      scale += e.deltaY * -0.001;
+      scale = Math.min(3, Math.max(1, scale));
+      container.style.transform = 'scale(' + scale + ')';
+    }, { passive: false });
+  </script>
+
+</body>
+</html>
